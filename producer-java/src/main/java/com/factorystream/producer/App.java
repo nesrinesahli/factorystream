@@ -1,30 +1,41 @@
 package com.factorystream.producer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
 public class App {
+    private static volatile boolean running = true;
+
     public static void main(String[] args) throws Exception {
-        ObjectMapper mapper = new ObjectMapper()
-                .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
+        List<Machine> fleet = createFleet(50, new Random(), 0.002);
 
-        List<Machine> fleet = createFleet(6, new Random(42), 0.02);   // high rate, to see anomalies fast
-
-        for (int tick = 0; tick < 300; tick++) {
-            long now = System.currentTimeMillis();
-            for (Machine machine : fleet) {
-                SensorEvent event = machine.nextReading(now);
-                if (machine.machineId().equals("M001")) {
-                    System.out.println(mapper.writeValueAsString(event));
-                }
+        // Ctrl+C: stop the loop, then wait for main to finish closing the producer
+        Thread mainThread = Thread.currentThread();
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            running = false;
+            try {
+                mainThread.join();
+            } catch (InterruptedException ignored) {
             }
-            Thread.sleep(100);   // 10 ticks/s, to speed up the test
-        }
+        }));
 
+        try (SensorProducer producer = new SensorProducer("localhost:9092", "sensor.raw")) {
+            System.out.println("Producing for " + fleet.size() + " machines. Ctrl+C to stop.");
+            long tick = 0;
+            while (running) {
+                long now = System.currentTimeMillis();
+                for (Machine machine : fleet) {
+                    producer.send(machine.nextReading(now));
+                }
+                tick++;
+                if (tick % 10 == 0) {
+                    System.out.println("sent=" + producer.sentCount() + " failed=" + producer.failedCount());
+                }
+                Thread.sleep(1000);
+            }
+        }
+        System.out.println("Producer closed.");
     }
 
     static List<Machine> createFleet(int count, Random random, double anomalyRate) {
