@@ -15,6 +15,52 @@ The whole stack is 100% open source and runs locally with Docker Compose.
 - **Orchestration & quality:** Airflow, Great Expectations
 - **Tooling:** Docker Compose, uv, GitHub Actions
 
+## Getting started
+
+Requirements: Docker, Java 21 (JDK), Maven.
+
+```bash
+# Start Kafka
+docker compose up -d
+
+# Build and run the IoT simulator
+cd producer-java
+mvn package
+java -jar target/producer-java-0.1.0.jar
+```
+
+## IoT producer (`producer-java/`)
+
+Simulates a fleet of factory machines (presses, welding robots, paint booths) spread over 3 production lines. Each machine sends one JSON reading per tick to the Kafka topic `sensor.raw`, keyed by `machine_id` so each machine's events stay ordered within a partition.
+
+Readings follow a Gaussian distribution around per-type baselines, with injected anomalies:
+
+- **Drift**: temperature and vibration rise gradually, then the machine breaks down (`E01`)
+- **Spike**: one-off vibration peak
+- **Breakdown**: sudden stop (`E02`), with `cadence = 0` until repaired
+
+Example event:
+
+```json
+{"event_id":"6cd436a4-...","machine_id":"M001","line_id":"L1","machine_type":"PRESS","event_time":1792945994250,"temperature":72.4,"vibration":2.1,"pressure":150.3,"cadence":20,"error_code":null}
+```
+
+Configuration (environment variables):
+
+| Variable | Default | Description |
+|---|---|---|
+| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka brokers |
+| `TOPIC` | `sensor.raw` | Target topic |
+| `MACHINES` | `50` | Number of simulated machines |
+| `TICKS_PER_SECOND` | `1` | Readings per machine per second |
+| `ANOMALY_RATE` | `0.002` | Probability per tick that an anomaly starts |
+| `SEED` | random | Fixed seed for reproducible runs |
+
+Sustains **1,000 events/s** locally (`TICKS_PER_SECOND=20`) with an idempotent producer (`acks=all`).
+
+Known limitation: anomaly durations are counted in ticks, so they shorten as `TICKS_PER_SECOND` increases.
+
+
 ## Status
 
 🚧 Work in progress — building step by step.
