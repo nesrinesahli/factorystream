@@ -25,6 +25,26 @@ services:
       KAFKA_NUM_PARTITIONS: 3
 
       KAFKA_HEAP_OPTS: "-Xmx512m -Xms512m"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+  kafka-init:
+    image: apache/kafka:4.1.0
+    container_name: kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: >
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092
+      --create --if-not-exists --topic sensor.raw --partitions 3
+
 
   minio:
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
@@ -95,5 +115,6 @@ services:
       - iceberg-rest
 
 volumes:
+  kafka-data:
   minio-data:
   catalog-data:
