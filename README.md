@@ -20,7 +20,10 @@ The whole stack is 100% open source and runs locally with Docker Compose.
 Requirements: Docker, Java 21 (JDK), Maven.
 
 ```bash
-# Start Kafka
+# Set credentials (edit the values)
+cp .env.example .env
+
+# Start Kafka, MinIO, the Iceberg REST catalog and Trino
 docker compose up -d
 
 # Build and run the IoT simulator
@@ -28,6 +31,13 @@ cd producer-java
 mvn package
 java -jar target/producer-java-0.1.0.jar
 ```
+
+| Service | URL | Role |
+|---|---|---|
+| Kafka | `localhost:9092` | Event streaming |
+| MinIO console | http://localhost:9001 | S3-compatible object storage |
+| Iceberg REST catalog | http://localhost:8181 | Table metadata catalog |
+| Trino | http://localhost:8080 | SQL query engine |
 
 ## IoT producer (`producer-java/`)
 
@@ -60,6 +70,23 @@ Sustains **1,000 events/s** locally (`TICKS_PER_SECOND=20`) with an idempotent p
 
 Known limitation: anomaly durations are counted in ticks, so they shorten as `TICKS_PER_SECOND` increases.
 
+## Lakehouse (MinIO + Iceberg + Trino)
+
+Tables are stored as Parquet files in the MinIO bucket `warehouse`, managed by Apache Iceberg through a REST catalog, and queried with Trino.
+
+```bash
+docker exec -it trino trino
+```
+
+```sql
+-- Query a table as it was at an earlier point in time (Iceberg time travel)
+SELECT count(*) FROM iceberg.demo.readings
+FOR TIMESTAMP AS OF TIMESTAMP '2026-10-26 18:08:20 UTC';
+
+-- Inspect the table's snapshot history
+SELECT snapshot_id, committed_at, operation
+FROM iceberg.demo."readings$snapshots";
+```
 
 ## Status
 
